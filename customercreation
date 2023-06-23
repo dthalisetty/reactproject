@@ -1,0 +1,1796 @@
+import moment from 'moment';
+import Multiselect from 'multiselect-react-dropdown';
+import React, { Component } from 'react';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import CustomSelect from './CustomSelect';
+import { fetchSelectOptionList, isMandatoryIcon, isShowTime, splitArray, validateEmail, validateNumber, validDomain } from './Validations';
+
+
+toast.configure()
+
+
+class CustomerEdit extends Component {
+    customerInfo = {
+        configKey: '',
+        payloadModel: '',
+        enableMailDebug: '',
+        allowRequestBatching: '',
+        batchingSize: '',
+        readMTAResponse: '',
+        apikeyfailurelog: '',
+        failureloginterval: 0,
+        validatePayload: '',
+        recipientInjectionMode: '',
+        status: ''
+
+    }
+    summConfig = {
+        "notificationEmails": []
+    }
+    notificationConfig = [];
+
+    constructor(props) {
+        super(props);
+        this.state = {
+            customerId: this.props.custId, customerInfo: this.customerInfo, custInfoList: this.props.custInfoList, customerConfigData: {}, apiKey: {},
+            customHeaders: {}, mtaConfig: [], filterConfig: [], eventConfig: [], roles: [],
+            Mtaobject: this.Mtaobject, isLoading: true, disabled: true, portValue: '',
+            fileEnabled: true, allowEventBatchingFlag: true, allowRequestBatchingFlag: true, defaultRolesInfo: [], defaultRoleNames: [], userRoles: [], customerConfigValue: {},
+            loginToken: sessionStorage.getItem('loginToken'), eventPropertiesDisable: false, showAutoRadio: true, summaryConfig: {}, notificationConfig: {}
+
+        };
+        this.addConfigFields = this.addConfigFields.bind(this);
+        this.changeFlag = this.changeFlag.bind(this);
+        this.changeBatchFlag = this.changeBatchFlag.bind(this);
+        this.removeRow = this.removeRow.bind(this);
+        // this.saveNewFilter = this.saveNewFilter.bind(this);
+        this.removeNewFilter = this.removeNewFilter.bind(this);
+        this.saveNewMta = this.saveNewMta.bind(this);
+        this.removeNewMta = this.removeNewMta.bind(this);
+        this.saveNewNotification = this.saveNewNotification.bind(this);
+        this.removeNewNotification = this.removeNewNotification.bind(this);
+        this.onSelect = this.onSelect.bind(this);
+        this.onRemove = this.onRemove.bind(this);
+        this.updateData = this.updateData.bind(this);
+        this.prepareArray = this.prepareArray.bind(this);
+        this.handleOnChange = this.handleOnChange.bind(this);
+        this.handleRadioEvent = this.handleRadioEvent.bind(this);
+        this.generateApiKey = this.generateApiKey.bind(this);
+        this.updateTableInfo = this.updateTableInfo.bind(this);
+        this.changePort = this.changePort.bind(this);
+        this.saveCustomerAsDraft = this.saveCustomerAsDraft.bind(this);
+        this.displayNdrMessage = this.displayNdrMessage.bind(this);
+        this.removeNdrMessage = this.removeNdrMessage.bind(this);
+        this.editNdrMessage = this.editNdrMessage.bind(this);
+        this.saveNdrMessage = this.saveNdrMessage.bind(this);
+    }
+
+    async componentDidMount() {
+        const popupscript = document.createElement("script");
+        popupscript.src = "./assets/js/popupscript.js";
+        popupscript.async = true;
+        document.body.appendChild(popupscript);
+        await fetch(`/zapiconfig/getConfigByKey/${this.state.customerId}`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'x-auth-key': `${this.state.loginToken}`
+            }
+        }).then(async response => {
+
+            if (response.ok) {
+                const data = await response.json();
+                console.log(data)
+                this.setState({
+                    customerConfigData: data, customerConfigValue: data.configValue,
+                    ...this.state.customerInfo.configKey = data.configKey,
+                    ...this.state.customerInfo.payloadModel = data.configValue.payloadModel,
+                    ...this.state.customerInfo.enableMailDebug = data.configValue.enableMailDebug,
+                    ...this.state.customerInfo.allowRequestBatching = data.configValue.allowRequestBatching,
+                    ...this.state.customerInfo.batchingSize = data.configValue.batchingSize,
+                    ...this.state.customerInfo.readMTAResponse = data.configValue.readMTAResponse,
+                    ...this.state.customerInfo.apikeyfailurelog = data.configValue.apikeyfailurelog,
+                    ...this.state.customerInfo.failureloginterval = data.configValue.failureloginterval,
+                    ...this.state.customerInfo.validatePayload = data.configValue.validatePayload,
+                    ...this.state.customerInfo.status = data.configValue.status,
+                    ...this.state.customerInfo.recipientInjectionMode = data.configValue.recipientInjectionMode,
+                    apiKey: data.configValue.apiKey,
+                    mtaConfig: data.configValue.availableMTAsList,
+                    roles: data.configValue.roles,
+                    eventConfig: data.configValue.eventConfig,
+                    filterConfig: data.configValue.filterConfigList !== undefined ? data.configValue.filterConfigList : this.state.filterConfig,
+                    customHeaders: data.configValue.headers,
+                    // summaryConfig: (data.configValue.SummaryConfig === null || data.configValue.SummaryConfig === undefined) ? this.summConfig : data.configValue.SummaryConfig,
+                    notificationConfig: (data.configValue.NotificationConfig === null || data.configValue.NotificationConfig === undefined) ? this.notificationConfig : data.configValue.NotificationConfig,
+                    isLoading: false
+
+                })
+
+            }
+
+        });
+        await fetch(`/zapiconfig/getAllRoles`, {
+            method: 'GET',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'x-auth-key': `${this.state.loginToken}`
+            }
+        }).then(response => response.json()).then(roleData => {
+            this.setState({ defaultRolesInfo: roleData });
+        })
+
+    }
+
+    enableFileEvents(eventConfig) {
+        let port = eventConfig.port;
+        Object.entries(eventConfig).map(([key, val]) => {
+            if (key === 'deliveryMethod' && val === "None") {
+                this.state.eventPropertiesDisable = true;
+            }
+            if (key === 'deliveryMethod' && val === "FILE") {
+                this.state.fileEnabled = false;
+            }
+            if (key === 'allowEventBatching' && val === 'Y') {
+                this.state.allowEventBatchingFlag = false;
+            }
+            if (key === 'protocol') {
+                if (val === 'FTP') {
+                    port = '21';
+                    eventConfig.port = port;
+                } else {
+                    port = '22';
+                    eventConfig.port = port;
+                }
+
+            }
+        });
+        this.setState({ eventConfig, portValue: port });
+    }
+
+    editChange(key, object, val, event) {
+        let value = event.target.value;
+        if (key === 'alertEmailsList' || key === 'notificationEmails') {
+            if (value.length !== 0 && value.includes(",")) {
+                object[key] = value.split(",");
+            } else if (value.length !== 0) {
+                object[key] = [value];
+            } else if (value.length === 0) {
+                object[key] = [];
+            }
+        } else if (key === 'failureloginterval') {
+            if (value != undefined && value.length > 0) {
+                value = value.trim();
+            } else {
+                value = "";
+            }
+            object[key] = value;
+        } else if (key === 'configKey') {
+            this.state.custInfoList.map((customer) => {
+                if (customer.customerID === value) {
+                    toast.warn("Customer code " + value + "  already exists.",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                    this[`${key}`].focus();
+                    return;
+                } else {
+                    object[key] = value;
+                }
+
+            });
+        } else {
+            object[key] = value;
+        }
+        this.setState({ object });
+    }
+
+    updateTableInfo(key, index, object, event) {
+        let newFilterObject = object;
+        let value = event.target.value;
+        if (key === 'endPoint' || key === 'listToken' || key === 'ndrMessage' || key === 'ndrFrom' || key == 'excludedDomains') {
+            object[index].filterProperties[key] = value;
+        } else {
+            object[index][key] = value;
+        }
+    }
+
+    addConfigFields(object, type) {
+        if (type === 'MTA') {
+            let newMtaObject = object;
+            let addRow = [];
+            newMtaObject.map((item, index) => {
+                if (item.mtaName.length === 0) {
+                    addRow.push("mtaName" + index);
+                }
+                if (item.injectType === 'API') {
+                    if (item.endPointURL.length === 0) {
+                        addRow.push("endPointURL" + index);
+                    }
+                }
+                if (item.injectType === 'SMTP') {
+                    if (item.smtpHost.length === 0 || item.smtpPort.length === 0 || item.userName.length === 0 || item.password.length === 0) {
+                        addRow.push("smtp details" + index);
+                    }
+                }
+                if (item.priority.length === 0) {
+                    addRow.push("priority" + index);
+                }
+            });
+            if (addRow.length === 0) {
+                let Mtaobject = {
+                    'endPointURL': '',
+                    'mtaName': '',
+                    'smtpHost': '',
+                    'smtpPort': '',
+                    'enableAuth': 'N',
+                    'enableStarttls': 'N',
+                    'injectType': 'API',
+                    'injectThroughCL': '',
+                    'userName': '',
+                    'password': '',
+                    'priority': newMtaObject.length + 1
+
+                };
+                newMtaObject = newMtaObject.push(Mtaobject);
+                this.setState({ object: newMtaObject });
+            } else {
+                toast.warn("Unable to add new MTA configuration, Please provide data for the existing row.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        } else if (type === 'Filter') {
+            let newFilterObject = object;
+            let addRow = true;
+            newFilterObject.map((item, index) => {
+                if (item.name.length === 0 || item.filterSource.length === 0 || item.filterProperties.endPoint.length === 0 ||
+                    item.filterProperties.listToken.length === 0) {
+                    addRow = false;
+                }
+            })
+            if (addRow) {
+                let FilterConfig = {
+                    'name': 'UnsubFilter',
+                    'filterSource': '',
+                    'filterStatus': 'I',
+                    'filterProperties': {
+                        'endPoint': '',
+                        'listToken': '',
+                        'ndrFrom': ''
+                    },
+                    'ndrMessages': [{
+                        "groupName": "others",
+                        "senders": "others",
+                        "message": "<html><body><br><br><b>Delivery has failed to these recipients or groups:</b><br><br>NDREMAILS recipients could not be emailed due to Company DNC policy.<br><br>Contact support for additional assistance if delivery required.<br><br></body></html>"
+                    }],
+                    'buttonDisable': 'false'
+                };
+                newFilterObject = newFilterObject.push(FilterConfig);
+                this.setState({ object: newFilterObject });
+            } else {
+                toast.warn("Unable to add new filter, Please provide data for the existing row.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        }
+        else if (type === 'notificationConfig') {
+            let testrows = [];
+            object.forEach((notification, i) => {
+                if (notification.group === '') {
+                    testrows.push("group" + i);
+                }
+                if (notification.fromAddress === '') {
+                    testrows.push("fromAddress" + i);
+                }
+                if (notification.emails.length == 0) {
+                    testrows.push("emails" + i);
+                }
+                if (notification.notificationTypes.length == 0) {
+                    testrows.push("noFocus");
+                }
+            });
+            if (testrows.length === 0) {
+                object.push({ group: '', fromAddress: '', emails: [], notificationTypes: [], status: 'I' });
+                this.setState({ object });
+            }
+            else {
+                toast.warn("Unable to add new notification config, Please provide data for the existing row.", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                if (testrows[0] !== 'noFocus')
+                    this[testrows[0]].focus();
+            }
+        }
+        else {
+            if (object.hasOwnProperty('newCustomKey')) {
+                var key = this[`newCustomKey`].value;
+                var val = this[`newCustomVal`].value;
+                if (key.length === 0 || val.length === 0) {
+                    toast.warn("Please provide custom header key values.",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                    return false;
+                }
+            } else {
+                let newKey = 'newCustomKey';
+                let newVal = 'newCustomVal';
+                let newObject = object;
+                newObject[newKey] = newVal;
+                this.setState({ object: newObject });
+            }
+        }
+    }
+
+    saveNewConfig(key, val, object) {
+        var newKey = this[key].value;
+        var newVal = this[val].value;
+        if (newKey.length > 0 && newVal.length > 0) {
+            delete object[key];
+            object[newKey] = newVal;
+            this.setState({ object, key: '', newKey: '', newVal: '', val: '' });
+        }
+        else {
+            toast.warn("Please provide the new configuration.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[key].focus();
+        }
+    }
+
+    removeRow(key, object) {
+        delete object[key];
+        this.setState({ object });
+    }
+
+    changeFlag(flagValue, flagName) {
+        if (flagName === 'fileEnabled') {
+            this.setState({ fileEnabled: flagValue, eventPropertiesDisable: flagValue });
+        } else if (flagName === "eventPropertiesDisable") {
+            this.setState({ eventPropertiesDisable: flagValue, fileEnabled: !flagValue });
+        } else if (flagName === "webhook") {
+            this.setState({ eventPropertiesDisable: !flagValue, fileEnabled: flagValue });
+        }
+
+    }
+    changeBatchFlag(flagValue, flagName) {
+        if (flagName === 'allowEventBatchingFlag') {
+            this.setState({ allowEventBatchingFlag: flagValue });
+        }
+        if (flagName === 'allowRequestBatchingFlag') {
+            this.setState({ allowRequestBatchingFlag: flagValue });
+        }
+    }
+    changePort(value) {
+        this.state.eventConfig.port = value;
+        this.setState({ portValue: value });
+    }
+    displayEventInfo(eventConfig, key, val) {
+        if (key === 'deliveryMethod') {
+            return <>
+                <label for="inputText" class="col-sm-4 col-form-label">{key}</label>
+                <div class="col-sm-4">
+                    <CustomSelect componentName={eventConfig} flagName="fileEnabled" changeFlag={this.changeFlag} selectKey={key} defaultText="Select Config" optionsList={fetchSelectOptionList(key)} defaultValue={val} type="Event" />
+                </div>
+            </>
+        }
+        if (!this.state.eventPropertiesDisable) {
+            if (key === 'allowEventBatching') {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}</label>
+                    <div class="col-sm-4">
+                        <CustomSelect componentName={eventConfig} flagName="allowEventBatchingFlag" changeBatchFlag={this.changeBatchFlag} selectKey={key} defaultText="Select Config" optionsList={fetchSelectOptionList(key)} defaultValue={val} type="Event" />
+                    </div>
+                </>
+            } else if (key === 'batchSize') {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{!this.state.allowEventBatchingFlag ? '*' : ''}</span></label>
+                    <div class="col-sm-4">
+                        <input type="text" name={key} ref={node => (this[`${key}`] = node)} disabled={this.state.allowEventBatchingFlag} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, eventConfig, val, event)} />
+                    </div>
+                </>
+            } else if (key === 'protocol') {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{!this.state.fileEnabled ? '*' : ''}</span></label>
+                    <div class="col-sm-4">
+                        <CustomSelect componentName={eventConfig} selectKey={key} flag={this.state.fileEnabled} defaultText="Select Config" portValueChange={this.changePort} optionsList={fetchSelectOptionList(key)} defaultValue={val} type="Event" />
+                    </div>
+                </>
+            } else if (key === 'endPoint') {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{this.state.fileEnabled ? '*' : ''}</span></label>
+                    <div class="col-sm-4">
+                        <input type="text" name={key} ref={node => (this[`${key}`] = node)} disabled={!this.state.fileEnabled} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, eventConfig, val, event)} />
+                    </div>
+                </>
+            } else if (key === 'port') {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{!this.state.fileEnabled ? '*' : ''}</span></label>
+                    <div class="col-sm-4">
+                        <input type="text" name={key} ref={node => (this[`${key}`] = node)} disabled class="form-control" value={this.state.portValue} />
+                    </div>
+                </>
+            } else {
+                return <>
+                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{!this.state.fileEnabled ? '*' : ''}</span></label>
+                    <div class="col-sm-4">
+                        {key === 'password' ?
+                            <input type="text" placeholder='Please provide Base64 encoded password' name={key} ref={node => (this[`${key}`] = node)} disabled={this.state.fileEnabled} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, eventConfig, val, event)} />
+                            : <input type="text" name={key} ref={node => (this[`${key}`] = node)} disabled={this.state.fileEnabled} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, eventConfig, val, event)} />}
+                    </div></>
+            }
+
+        }
+
+    }
+    displayCustomerInfo(customerInfo, key, val) {
+
+        if (key === 'enableMailDebug' || key === 'allowRequestBatching' || key === 'readMTAResponse' || key === 'validatePayload' || key === 'recipientInjectionMode' || key === 'status') {
+
+            return <><label for="inputText" class="col-sm-4 col-form-label">{key}</label>
+                <div class="col-sm-4">
+                    <CustomSelect componentName={customerInfo} selectKey={key} defaultText="Select Config" flagName="allowRequestBatchingFlag" changeBatchFlag={this.changeBatchFlag} optionsList={fetchSelectOptionList(key)} defaultValue={val} type="Event" />
+                </div></>
+
+        } else if (key === 'configKey' || key === 'payloadModel') {
+            return <><label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{isMandatoryIcon(key) ? '*' : ''}</span></label>
+                <div class="col-sm-4">
+                    {this.state.customerId === 'new' && key === 'configKey' ?
+                        <input type="text" name={key} class="form-control" ref={node => (this[`${key}`] = node)} defaultValue={val.toString()} onBlur={(event) => this.editChange(key, customerInfo, val.toString(), event)} />
+                        : <input type="text" name={key} class="form-control" defaultValue={val.toString()} disabled={true} />}
+                </div></>
+        } else if (key === 'batchingSize') {
+            return <>
+                <label for="inputText" class="col-sm-4 col-form-label">{key}</label>
+                <div class="col-sm-4">
+                    <input type="text" name={key} ref={node => (this[`${key}`] = node)} disabled={this.state.allowRequestBatchingFlag} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, customerInfo, val, event)} />
+                </div>
+            </>
+        } else {
+            return <> <label for="inputText" class="col-sm-4 col-form-label">{key}{isShowTime(key) ? '(ms)' : ''}<span className="mandatoryicon">{isMandatoryIcon(key) ? '*' : ''}</span></label><div class="col-sm-4">
+                <input type="text" name={key} ref={node => (this[`${key}`] = node)} required class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, customerInfo, val, event)} />
+            </div></>
+        }
+
+    }
+    handleChange = event => {
+        let apiObject = this.state.apiKey;
+        apiObject['expiryDate'] = moment(event.target.value).format('DD/MM/YYYY');
+        this.setState({ apiKey: apiObject });
+    };
+    formatDate(date) {
+        if (date !== null) {
+            let stringDate = date.split("/");
+            return moment(stringDate[2] + "-" + stringDate[1] + "-" + stringDate[0]).format('YYYY-MM-DD');
+        }
+
+    }
+
+    prepareRoleNameObject(roleObject, roles) {
+        if (roleObject != null && roleObject.length > 0) {
+            let dbRoles = [];
+            let clientRoles = [];
+            roleObject.map((role, index) => {
+                dbRoles.push({ "label": role.roleName });
+            });
+            var result = [];
+            if (roles != null && roles.length > 0) {
+                roles.map((val, index) => {
+                    clientRoles.push({ "label": val })
+                }
+                );
+                result = dbRoles.filter(col => {
+                    return clientRoles.find(selected => selected.label === col.label)
+                })
+            }
+            this.setState({ defaultRoleNames: dbRoles, userRoles: result });
+        }
+    }
+
+    getSelectedNotificationTypes(notificationTypes) {
+        let selectedTypes = [];
+        notificationTypes.forEach((type) => { selectedTypes.push({ 'label': type }) });
+        return selectedTypes;
+    }
+
+    saveNotificationTypes(selectedTypes, index, notificationConfig) {
+        notificationConfig[index].notificationTypes = [];
+        selectedTypes.forEach((type) => { notificationConfig[index].notificationTypes.push(type.label) });
+        this.setState({ notificationConfig });
+    }
+
+    saveNewFilter(index, filterConfig, filterObj) {
+
+        if (filterObj.name.length === 0) {
+            toast.warn("Please provide newFilterName.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            document.getElementById(`filterName${index}`).focus();
+            return false;
+        } else if (filterObj.filterSource.length === 0) {
+            toast.warn("Please provide newFilterSource.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            document.getElementById(`filterSource${index}`).focus();
+            return false;
+        } else if (filterObj.filterProperties.endPoint.length === 0) {
+            toast.warn("Please provide newFilterEndpoint.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            document.getElementById(`filterEndPoint${index}`).focus();
+            return false;
+        } else if (filterObj.filterProperties.listToken.length === 0) {
+            toast.warn("Please provide newFilterListToken.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            document.getElementById(`filterlistToken${index}`).focus();
+            return false;
+        }
+        else if (filterObj.filterProperties.ndrFrom.length > 0) {
+            if (!validateEmail([filterObj.filterProperties.ndrFrom], 'ndrFrom')) {
+                toast.warn("Please provide valid ndrFrom.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                document.getElementById(`filterndrFrom${index}`).focus();
+                return false;
+            }
+        }
+        else if (filterObj.ndrMessages.length === 0) {
+            toast.warn("Please provide filter ndrMessage.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        filterObj.ndrMessages.map((item, index) => {
+            this.validateNdrMessage(item, filterObj.ndrMessages, index);
+        })
+        filterConfig[index] = filterObj;
+        console.log(filterConfig);
+        delete filterConfig[index].buttonDisable;
+        this.setState({ filterConfig });
+
+    }
+
+    removeNewFilter(index, filterStatus) {
+        if (filterStatus === 'A') {
+            toast.warn("FilterStatus is in active state, unable to delete..",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+        } else {
+            let newFilter = this.state.filterConfig.filter((e, i) => i !== index);
+            this.setState({ filterConfig: newFilter });
+        }
+    }
+
+    saveNewMta(index, mtaConfig) {
+        var newmtaName = this[`mtaName${index}`].value;
+        var newendPointURL = this[`endPointURL${index}`].value;
+        var newsmtpHost = this[`smtpHost${index}`].value;
+        var newsmtpPort = this[`smtpPort${index}`].value;
+        var newPriority = mtaConfig[index]['priority'];
+        var newuserName = this[`userName${index}`].value;
+        var newpassword = this[`password${index}`].value;
+        var injectType = mtaConfig[index].injectType;
+        var enableAuth = mtaConfig[index].enableAuth;
+        if (newmtaName.length === 0) {
+            toast.warn("Please provide mtaName.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[`mtaName${index}`].focus();
+            return false;
+        }
+        if (injectType === 'API') {
+            if (newendPointURL.length === 0) {
+                toast.warn("Please provide endPointURL.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`endPointURL${index}`].focus();
+                return false;
+            }
+        }
+
+        if (injectType === 'SMTP') {
+            if (newsmtpHost.length === 0) {
+                toast.warn("Please provide smtpHost.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`smtpHost${index}`].focus();
+                return false;
+            }
+            if (newsmtpPort.length === 0) {
+                toast.warn("Please provide smtpPort.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`smtpPort${index}`].focus();
+                return false;
+            } else if (enableAuth === 'Y') {
+                if (newuserName.length === 0) {
+                    toast.warn("Please provide userName.",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                    this[`userName${index}`].focus();
+                    return false;
+                } if (newpassword.length === 0) {
+                    toast.warn("Please provide password.",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                    this[`password${index}`].focus();
+                    return false;
+                }
+            }
+        }
+
+        if (newPriority.length === 0) {
+            toast.warn("Please provide Priority.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[`priority${index}`].focus();
+            return false;
+        }
+
+        mtaConfig[index]['mtaName'] = newmtaName;
+        mtaConfig[index]['endPointURL'] = newendPointURL;
+        mtaConfig[index]['smtpHost'] = newsmtpHost;
+        mtaConfig[index]['smtpPort'] = newsmtpPort;
+        mtaConfig[index]['priority'] = parseInt(newPriority);
+        mtaConfig[index]['userName'] = newuserName;
+        mtaConfig[index]['password'] = newpassword;
+        this.setState({ mtaConfig });
+    }
+    removeNewMta(index, mtaConfig) {
+        if (mtaConfig[index]['priority'] === 1) {
+            toast.warn("Unable to delete MTAConfig with priority 1, Please change the priority and retry.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        } else {
+            let newMta = this.state.mtaConfig.filter((e, i) => i !== index);
+            for (var i = 0; i < newMta.length; i++) {
+                if (newMta[i].priority > newMta.length) {
+                    newMta[i]['priority'] = newMta.length;
+                }
+            }
+            this.setState({ mtaConfig: newMta });
+        }
+
+    }
+
+    saveNewNotification(notificationConfig, index) {
+        let group = notificationConfig[index].group;
+        if (notificationConfig.filter((noticiation) => noticiation.group === group).length > 1) {
+            toast.warn("Group already exists with the same name", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[`group${index}`].focus();
+            return false;
+        }
+        if (notificationConfig[index].group.length === 0) {
+            toast.warn("Please provide Group", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[`group${index}`].focus();
+            return false;
+        }
+        if (notificationConfig[index].fromAddress.length === 0) {
+            toast.warn("Please provide From address", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this[`fromAddress${index}`].focus();
+            return false;
+        }
+        if (!validateEmail([notificationConfig[index].fromAddress], 'From address')) {
+            this[`fromAddress${index}`].focus();
+            return false;
+        }
+        if (notificationConfig[index].notificationTypes.length == 0) {
+            toast.warn("Please select atleast one Notification type", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        this.setState({ notificationConfig });
+    }
+
+    removeNewNotification(notificationConfig, index) {
+        let group = notificationConfig[index].group;
+        let newNotication = notificationConfig.filter((e) => e.group !== group);
+        console.log(newNotication)
+        this.setState({ notificationConfig: newNotication });
+    }
+
+    onSelect(selectedList, selectedItem) {
+        this.state.roles = [];
+        selectedList.map(selectedValue =>
+            this.state.roles.push(selectedValue.label)
+        );
+        this.setState({ ...this.state.roles });
+    }
+
+    onRemove(selectedList, removedItem) {
+        this.state.roles = [];
+        selectedList.map(selectedValue =>
+            this.state.roles.push(selectedValue.label)
+        );
+        this.setState({ ...this.state.roles });
+    }
+
+    async saveCustomer(customerObj) {
+        let { customerConfigValue, customerInfo, apiKey, mtaConfig, roles, eventConfig, filterConfig, customHeaders, notificationConfig } = this.state;
+        let configMethod = '';
+        if (this.state.customerId === 'new') {
+            configMethod = 'createConfig';
+            let conkey = "[^A-Za-z0-9\s]";
+            customerObj.configKey = customerInfo.configKey;
+            if (customerObj.configKey.length === 0) {
+                toast.warn("Please provide configKey.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            } else if (customerObj.configKey.match(conkey)) {
+                toast.warn("configKey should be alphaNumeric.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        } else {
+            configMethod = 'updateConfig';
+        }
+        customerConfigValue.payloadModel = customerInfo.payloadModel;
+        customerConfigValue.enableMailDebug = customerInfo.enableMailDebug;
+        customerConfigValue.allowRequestBatching = customerInfo.allowRequestBatching;
+        customerConfigValue.batchingSize = customerInfo.batchingSize;
+        if (!validateNumber(customerConfigValue.batchingSize, 'batchingSize')) {
+            this.batchingSize.focus();
+            return false;
+        }
+        customerConfigValue.readMTAResponse = customerInfo.readMTAResponse;
+        customerConfigValue.apikeyfailurelog = customerInfo.apikeyfailurelog.replace(/\s+/g, '');
+        if (customerConfigValue.apikeyfailurelog.trim().length === 0) {
+            toast.warn("Please provide apikeyfailurelog.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            this.apikeyfailurelog.focus();
+            return false;
+        }
+
+
+        if (!validateNumber(customerInfo.failureloginterval, 'failureloginterval')) {
+            this.failureloginterval.focus();
+            return false;
+        }
+        customerConfigValue.failureloginterval = parseInt(customerInfo.failureloginterval);
+        customerConfigValue.validatePayload = customerInfo.validatePayload;
+        if (customerInfo.status === 'P') {
+            toast.warn("Please select status Active or InActive.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+
+            return false;
+        }
+        customerConfigValue.status = customerInfo.status;
+        customerConfigValue.recipientInjectionMode = customerInfo.recipientInjectionMode;
+        customerConfigValue.apiKey = apiKey;
+        customerConfigValue.apiKey.alertEmailsList = [];
+        if (customerConfigValue.apiKey.token.length === 0) {
+            if (this.state.showAutoRadio) {
+                await this.generateApiKey("auto");
+            } else {
+                await this.generateApiKey("custom");
+            }
+            if (customerConfigValue.apiKey.token.length === 0) {
+                return false;
+            }
+        } if (customerConfigValue.apiKey.expiryDate === "") {
+            toast.warn("Please provide expiryDate.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        } if (!validateNumber(customerConfigValue.apiKey.alertBeforeDays.trim(), 'alertBeforeDays')) {
+            this.alertBeforeDays.focus();
+            return false;
+        }
+
+        customerConfigValue.eventConfig = eventConfig;
+        if (customerConfigValue.eventConfig.deliveryMethod == "FILE") {
+            if (customerConfigValue.eventConfig.host.trim().length === 0) {
+                toast.warn("Please provide eventConfig host.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.host.focus();
+                return false;
+            } else if (customerConfigValue.eventConfig.userName.trim().length === 0) {
+                toast.warn("Please provide eventConfig userName.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.userName.focus();
+                return false;
+            } else if (customerConfigValue.eventConfig.password.trim().length === 0) {
+                toast.warn("Please provide eventConfig password.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.password.focus();
+                return false;
+            } else if (customerConfigValue.eventConfig.location.trim().length === 0) {
+                toast.warn("Please provide eventConfig location.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.location.focus();
+                return false;
+            }
+        } else if (customerConfigValue.eventConfig.deliveryMethod == "API") {
+            if (customerConfigValue.eventConfig.endPoint.trim().length === 0) {
+                toast.warn("Please provide eventConfig endPoint.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.endPoint.focus();
+                return false;
+            }
+        }
+        if (customerConfigValue.eventConfig.allowEventBatching === "Y") {
+            if (!validateNumber(customerConfigValue.eventConfig.batchSize.trim(), 'batchSize')) {
+                this.batchSize.focus();
+                return false;
+            }
+        }
+
+        let mtaConfigKeys = [];
+        mtaConfig.map((item, index) => {
+            if (item.mtaName.trim().length === 0) {
+
+                mtaConfigKeys.push("mtaName in row " + (index + 1));
+            }
+            if (item.injectType === 'API') {
+                if (item.endPointURL.trim().length === 0) {
+                    mtaConfigKeys.push("endPointURL in row " + (index + 1));
+                }
+            }
+            if (item.injectType === 'SMTP') {
+                if (item.smtpHost.trim().length === 0) {
+                    mtaConfigKeys.push("smtpHost in row " + (index + 1))
+                }
+                if (item.smtpPort.length === 0) {
+                    mtaConfigKeys.push("smtpPort in row " + (index + 1));
+                }
+                if (item.enableAuth === 'Y') {
+                    if (item.userName === undefined || item.userName.length === 0) {
+                        mtaConfigKeys.push("userName in row " + (index + 1));
+                    }
+                    if (item.password === undefined || item.password.length === 0) {
+                        mtaConfigKeys.push("password in row " + (index + 1));
+                    }
+                }
+            }
+            if (item.priority.length === 0) {
+                mtaConfigKeys.push("priority in row " + (index + 1));
+            }
+
+        });
+        if (mtaConfigKeys.length > 0) {
+            toast.warn("Please provide " + mtaConfigKeys.toString() + " in MTA config tab.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+
+        customerConfigValue.availableMTAsList = mtaConfig;
+        customerConfigValue.roles = roles;
+        if (customerConfigValue.roles.length === 0) {
+            toast.warn("Please select atleast one role.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        // let filterConfigKeys = [];
+
+        // filterConfig.map((item, index) => {
+        //     if (item.name.trim().length === 0) {
+        //         filterConfigKeys.push("FilterName in row " + (index + 1));
+        //     }
+        //     if (item.filterSource.trim().length === 0) {
+        //         filterConfigKeys.push("FilterSource in row " + (index + 1));
+        //     }
+        //     if (item.filterProperties.endPoint.trim().length === 0) {
+        //         filterConfigKeys.push("FilterEndPoint in row " + (index + 1));
+        //     } else if (item.filterProperties.listToken.trim().length === 0) {
+        //         filterConfigKeys.push("FilterListToken in row " + (index + 1));
+        //     } else if (item.filterProperties.ndrFrom.length > 0) {
+        //         // filterConfigKeys.push("Filter ndrFrom in row " + (index + 1));
+        //         let ndrFrom = [];
+        //         ndrFrom.push(item.filterProperties.ndrFrom.trim());
+        //         if (!validateEmail(ndrFrom, 'ndrFrom')) {
+        //             filterConfigKeys.push("Filter ndrFrom in row " + (index + 1));
+        //             return false;
+        //         }
+        //     } else if (item.ndrMessages.length === 0) {
+        //         filterConfigKeys.push("Filter ndrMessage in row " + (index + 1));
+        //     }
+        //     let ndrMessage = item.ndrMessages;
+        //     ndrMessage.map((ndrObject, ndrIndex) => {
+        //         if (!this.validateNdrMessage(ndrObject, ndrMessage, ndrIndex)) {
+        //             filterConfigKeys.push("Filter ndrMessage in row " + (ndrIndex + 1) + " is not valid");
+        //         }
+        //     })
+        // });
+        // if (filterConfigKeys.length > 0) {
+        //     toast.warn("Please provide " + filterConfigKeys.toString() + " in Filter tab.",
+        //         { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+        //     return false;
+        // }
+        if (filterConfig.length > 0 && !validDomain(filterConfig[0].filterProperties.excludedDomains.split(','), 'ExcludedDomains')) {
+            this['excludedDomains0'].focus();
+            return false;
+        }
+        customerConfigValue.filterConfigList = filterConfig;
+        customerConfigValue.headers = customHeaders;
+        if (customHeaders.hasOwnProperty('newCustomKey')) {
+            delete customHeaders['newCustomKey'];
+        }
+        // if (summaryConfig.notificationEmails.length > 0) {
+        //     if (!validateEmail(summaryConfig.notificationEmails, 'notificationEmails')) {
+        //         return false;
+        //     }
+        // }
+
+        // customerConfigValue.SummaryConfig = summaryConfig;
+        customerConfigValue.NotificationConfig = notificationConfig;
+        console.log(notificationConfig)
+        let validation = notificationConfig.map((notification, index) => {
+            if (notification.group === '') {
+                toast.warn("Please provide Group", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`group${index}`].focus();
+                return false;
+            }
+            if (notification.fromAddress === '') {
+                toast.warn("Please provide From address", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`fromAddress${index}`].focus();
+                return false;
+            }
+            if (!validateEmail([notification.fromAddress], 'From address')) {
+                this[`fromAddress${index}`].focus();
+                return false;
+            }
+            if (notification.notificationTypes.length == 0) {
+                toast.warn("Please select atleast one Notification type", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+            if (notification.mailerId === '') {
+                toast.warn("Please provide Mailer Id", { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this[`mailerId${index}`].focus();
+                return false;
+            }
+        });
+        if (validation.toString().includes('false')) {
+            return false;
+        }
+        customerObj.configKey = customerInfo.configKey;
+        customerObj.configValue = customerConfigValue;
+        await fetch(`/zapiconfig/${configMethod}`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'x-auth-key': `${this.state.loginToken}`
+            },
+            body: JSON.stringify(customerObj),
+        }).then(async response => {
+            const data = await response.text();
+            if (response.ok) {
+                if (this.state.customerId === 'new') {
+                    toast.success("Customer created successfully",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 })
+                } else {
+                    toast.success(data,
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 })
+                }
+
+            } else {
+                const error = (data && data.message) || response.statusText;
+                console.log("error", error);
+                return Promise.reject(error);
+            }
+            this.props.saveCustomer(false);
+            this.setState({ customerObj });
+        }).catch(error => {
+            toast.error(error,
+                { position: toast.POSITION.TOP_CENTER, autoClose: false })
+            console.error('There was an error!', error);
+        });
+
+    }
+
+    updateData(key, object, type, event) {
+        if (type === "key") {
+            var newKey = event.target.value.trim();
+            if (newKey.length === 0) {
+                return false;
+            } else if (object.hasOwnProperty(newKey)) {
+                toast.warn("Same customheader key not allowed.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: false })
+                return false;
+            }
+        } else if (type === "value") {
+            var newVal = event.target.value.trim();
+            var newKey = this[key].value.trim();
+            if (newKey.length > 0 && newVal.length > 0) {
+                delete object[key];
+                object[newKey] = newVal
+                return true;
+            } else {
+                return false;
+            }
+        }
+    }
+    prepareArray(mtaConfig) {
+        let options = [];
+        mtaConfig.forEach((mtaobject, index) =>
+            options.push({ value: index + 1, label: index + 1 })
+        );
+        return options;
+    }
+    handleOnChange(e, index, mtaArrayObj, prevPriority) {
+        let value = parseInt(e.target.value);
+        if (prevPriority !== 0) {
+            let changeIndex;
+            for (var i = 0; i < mtaArrayObj.length; i++) {
+                if (mtaArrayObj[i].priority === value) {
+                    changeIndex = i;
+                }
+            }
+            if (changeIndex !== undefined) {
+                mtaArrayObj[changeIndex]['priority'] = prevPriority;
+            }
+            mtaArrayObj[index]['priority'] = value;
+            this.setState(mtaArrayObj);
+        } else {
+            mtaArrayObj[index]['priority'] = value;
+        }
+
+    }
+    displayTokenInfo() {
+        return <>
+            <div class="col-sm-2">
+                <input class="form-check-input" type="radio" name="gridRadios" id="gridRadios1" value="option1" checked />
+                <label class="form-check-label" for="gridRadios1">
+                    Custom
+                </label>
+            </div>
+            <div class="col-sm-2">
+                <input class="form-check-input" type="radio" name="gridRadios" id="gridRadios2" value="option2" />
+                <label class="form-check-label" for="gridRadios2">
+                    Manual
+                </label>
+            </div></>
+    }
+
+    handleRadioEvent(src) {
+        if (src.target.value === 'auto') {
+            this.setState({ showAutoRadio: true })
+        }
+        else {
+            this.setState({ showAutoRadio: false })
+        }
+    }
+
+    async generateApiKey(formName) {
+        var keyId, keySecret;
+        if (formName === 'auto') {
+            keyId = this.keyId.value.trim();
+            if (keyId.length === 0) {
+                toast.warn("Please provide KeyId value.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.keyId.focus();
+                return false;
+            }
+            keySecret = this.keySecret.value.trim();
+            if (keySecret.length === 0) {
+                toast.warn("Please provide keySecret value.",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                this.keySecret.focus();
+                return false;
+            }
+            var alertEmailsList = splitArray(alertEmailsList);
+            let customerProperties = {
+                'keyId': keyId,
+                'keySecret': keySecret,
+                'expiryDate': this.state.customerInfo.expiryDate,
+                'alertBeforeDays': this.state.customerInfo.alertBeforeDays,
+                'alertEmailsList': alertEmailsList
+            }
+            await fetch(`/zapiconfig/v1/generateKey`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                    'x-auth-key': `${this.state.loginToken}`
+                },
+                body: JSON.stringify(customerProperties),
+            }).then(async response => {
+                const data = await response.text();
+                if (response.ok) {
+                    this.state.apiKey.token = data;
+                    toast.success("Token generated successfully",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 })
+                    this.setState({ ...this.state.apiKey, ...this.state.customerConfigValue.apiKey = this.state.apiKey });
+                } else {
+                    const error = (data && data.message) || response.statusText;
+                    console.log("error", error);
+                    return Promise.reject(error);
+                }
+            }).catch(error => {
+                toast.error(error,
+                    { position: toast.POSITION.TOP_CENTER, autoClose: false })
+                console.error('There was an error!', error);
+            });
+        } else {
+            keySecret = this.customToken.value.trim();
+            if (keySecret.length === 0) {
+                toast.warn("Please provide custom token value",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: false })
+                this.customToken.focus();
+                return false;
+            }
+            this.state.apiKey.token = keySecret;
+            this.setState({ ...this.state.apiKey, ...this.state.customerConfigValue.apiKey = this.state.apiKey });
+        }
+
+    }
+
+    async saveCustomerAsDraft(customerData) {
+        let { customerConfigValue, customerInfo, apiKey, mtaConfig, roles, eventConfig, filterConfig, customHeaders, notificationConfig } = this.state;
+        let conkey = "[^A-Za-z0-9\s]";
+        if (customerInfo.configKey.length === 0) {
+            toast.warn("Please provide configKey.",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        } else if (customerInfo.configKey.match(conkey)) {
+            toast.warn("Please provide only alphaNumerics for configKey",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        if (apiKey.token.length === 0) {
+            var keyId, keySecret;
+            if (this.state.showAutoRadio) {
+                keyId = this.keyId.value.trim();
+                keySecret = this.keySecret.value.trim();
+                if (keyId.length !== 0 && keySecret.length !== 0) {
+                    await this.generateApiKey("auto");
+                }
+
+            } else {
+                keySecret = this.customToken.value.trim();
+                if (keySecret.length !== 0) {
+                    await this.generateApiKey("custom");
+                }
+            }
+        }
+        customerConfigValue.payloadModel = customerInfo.payloadModel;
+        customerConfigValue.enableMailDebug = customerInfo.enableMailDebug;
+        customerConfigValue.allowRequestBatching = customerInfo.allowRequestBatching;
+        customerConfigValue.batchingSize = customerInfo.batchingSize;
+        customerConfigValue.readMTAResponse = customerInfo.readMTAResponse;
+        customerConfigValue.apikeyfailurelog = customerInfo.apikeyfailurelog.replace(/\s+/g, '');
+        customerConfigValue.failureloginterval = parseInt(customerInfo.failureloginterval);
+        customerConfigValue.validatePayload = customerInfo.validatePayload;
+        customerConfigValue.status = 'P';
+        customerConfigValue.recipientInjectionMode = customerInfo.recipientInjectionMode;
+        customerConfigValue.apiKey = apiKey;
+        customerConfigValue.eventConfig = eventConfig;
+        customerConfigValue.availableMTAsList = mtaConfig;
+        customerConfigValue.roles = roles;
+        customerConfigValue.filterConfigList = filterConfig;
+        customerConfigValue.headers = customHeaders;
+        // customerConfigValue.SummaryConfig = summaryConfig;
+        customerConfigValue.NotificationConfig = notificationConfig
+        customerData.configKey = customerInfo.configKey;
+        customerData.configValue = customerConfigValue;
+
+        await fetch(`/zapiconfig/createConfig`, {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'x-auth-key': `${this.state.loginToken}`
+            },
+            body: JSON.stringify(customerData),
+        }).then(async response => {
+            const data = await response.text();
+            if (response.ok) {
+                toast.success("Customer saved successfully",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 })
+            } else {
+                const error = (data && data.message) || response.statusText;
+                console.log("error", error);
+                return Promise.reject(error);
+            }
+            this.props.saveCustomer(false);
+            this.setState({ customerData });
+        }).catch(error => {
+            toast.error(error,
+                { position: toast.POSITION.TOP_CENTER, autoClose: false })
+            console.error('There was an error!', error);
+        });
+
+    }
+
+    addFilterRow(ndrMessage, filterConfigObj, index) {
+        let ndrEmptyFlag = false;
+        ndrMessage.map((item, index) => {
+            var senders = item.senders;
+            var message = item.message;
+            var groupName = item.groupName;
+
+            if (senders === undefined || senders === null || senders === "") {
+                ndrEmptyFlag = true;
+            }
+            if (message === undefined || message === null || message === "") {
+                ndrEmptyFlag = true;
+            }
+            if (groupName === undefined || groupName === null || groupName === "") {
+                ndrEmptyFlag = true;
+            }
+        });
+        if (!ndrEmptyFlag) {
+            ndrMessage.push({ "groupName": "", "senders": "", "message": "" });
+            filterConfigObj[0]['ndrMessages'] = ndrMessage;
+            this.setState(filterConfigObj);
+        } else {
+            toast.warn("Please provide values to groupName, sender and message",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+
+            return false;
+        }
+
+    }
+
+    removeNdrMessage(index, item, ndrMessage, filterConfigObj) {
+        ndrMessage.splice(ndrMessage.indexOf(item), 1);
+        filterConfigObj[0]['ndrMessages'] = ndrMessage;
+        this.setState(filterConfigObj);
+    }
+
+    editNdrMessage(event, item, ndrMessage, filterConfigObj, index, type) {
+        let eventValue = event.target.value;
+        if (type === "groupName") {
+            if (eventValue === "others" || eventValue === "others".toUpperCase()) {
+                toast.warn("Please provide unique value for " + type,
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        }
+
+        item[type] = eventValue;
+        ndrMessage[index] = item;
+        filterConfigObj[0]['ndrMessages'] = ndrMessage;
+        this.setState(filterConfigObj);
+    }
+
+    validateNdrMessage(item, ndrMessage, index) {
+        let errorFlag = false;
+        if (item.groupName.length === 0) {
+            toast.warn("Please provide a value for groupName",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        if (item.senders.length === 0) {
+            toast.warn("Please provide a value for senders",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+        if (item.message.length === 0) {
+            toast.warn("Please provide a value for message",
+                { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+            return false;
+        }
+
+        if (item.groupName.length > 0) {
+            for (let i = 0; i < ndrMessage.length; i++) {
+                if (i != index) {
+                    if (ndrMessage[i].groupName === item.groupName) {
+                        errorFlag = true;
+                        break;
+                    }
+                }
+
+            }
+            if (errorFlag) {
+                toast.warn("Please provide unique groupName",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        }
+        if (item.senders.length > 0 && item.groupName !== "others") {
+            let newSendersList = [];
+            newSendersList = item.senders.includes(",") ? item.senders.split(",") : [item.senders];
+            let resultArray = [];
+            if (validateEmail(newSendersList, 'senders')) {
+                for (let i = 0; i < ndrMessage.length; i++) {
+                    if (i != index && ndrMessage[i].groupName !== "others") {
+                        let oldEmailList = [];
+                        oldEmailList = ndrMessage[i].senders.includes(",") ? ndrMessage[i].senders.split(",") : [ndrMessage[i].senders];
+                        if (!oldEmailList.includes('others')) {
+                            const contains = oldEmailList.some(element => {
+                                return newSendersList.indexOf(element) !== -1;
+                            });
+                            resultArray.push(contains);
+                        }
+                    }
+
+                }
+                if (resultArray.includes(true)) {
+                    toast.warn("Please provide unique senders list",
+                        { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                    return false;
+                }
+
+            } else {
+                toast.warn("Please provide valid senders list",
+                    { position: toast.POSITION.TOP_CENTER, autoClose: 3000 });
+                return false;
+            }
+        }
+        return true;
+    }
+
+    saveNdrMessage(item, ndrMessage, filterConfigObj, index) {
+        if (this.validateNdrMessage(item, ndrMessage, index)) {
+            ndrMessage[index] = item;
+            filterConfigObj[0]['ndrMessages'] = ndrMessage;
+            this.setState(filterConfigObj);
+        }
+
+    }
+
+    displayNdrMessage(filterNdrMessage, filterConfigObj) {
+        const ndrMessage = filterNdrMessage.map((item, index) => {
+            var groupName = item.groupName;
+            var senders = item.senders;
+            var message = item.message;
+
+            return <tr scope="row" key={groupName}>
+                <td class="col-sm-1"><input type="text" class="form-control" defaultValue={groupName} disabled={groupName === 'others' ? true : false} onBlur={(event) => this.editNdrMessage(event, item, filterNdrMessage, filterConfigObj, index, "groupName")} /> </td>
+                <td class="col-sm-2"><input type="text" class="form-control" defaultValue={senders} disabled={groupName === 'others' ? true : false} onBlur={(event) => this.editNdrMessage(event, item, filterNdrMessage, filterConfigObj, index, "senders")} /> </td>
+                <td class="col-sm-2"><textarea wrap="hard" class="form-control configInput" rows="5" defaultValue={message} onBlur={(event) => this.editNdrMessage(event, item, filterNdrMessage, filterConfigObj, index, "message")} />  </td>
+                <td class="col-sm-1">
+                    <button type="button" class="btn btn-secondary rolebutton" title='Save' onClick={() => this.saveNdrMessage(item, filterNdrMessage, filterConfigObj, index)}><i class="bi bi-check"></i></button>
+                    <button type="button" class="btn btn-secondary" disabled={groupName === 'others' ? true : false} title='Remove' onClick={() => { if (window.confirm('Are you sure you want to delete ' + groupName)) this.removeNdrMessage(index, item, filterNdrMessage, filterConfigObj) }}><i class="bi bi-dash"></i></button></td>
+            </tr>
+        });
+
+        return ndrMessage;
+    }
+
+
+    render() {
+        const { customerConfigData, customerInfo, customerConfigValue, apiKey, mtaConfig, roles, eventConfig, filterConfig, customHeaders, defaultRolesInfo, defaultRoleNames, userRoles, notificationConfig } = this.state;
+        let filterHeader = '', customerConfigInfo = '', filterConfigInfo = '', customHeadersInfo = '', apiKeyInfo = '', mtaConfigInfo = '', roleInfo = '', eventConfigInfo = '', mtaHeader = '', notificationConfigInfo = '', notificationHeader = '', filterNdrMessage = '';
+        if (customerInfo != null && !this.state.isLoading) {
+            customerConfigInfo = Object.entries(customerInfo).map(([key, val]) => {
+                return (
+                    <div class="row mb-3">
+                        {this.displayCustomerInfo(customerInfo, key, val)}
+                    </div>
+                )
+            });
+        }
+        else customerConfigInfo = "No Data";
+
+        if (apiKey != null && !this.state.isLoading) {
+            apiKeyInfo = Object.entries(apiKey).map(([key, val]) => {
+                return (
+                    <div class="row mb-3">
+                        {
+                            <>
+                                {(key !== 'alertEmailsList') ?
+                                    <label for="inputText" class="col-sm-4 col-form-label">{key}<span className="mandatoryicon">{isMandatoryIcon(key) ? '*' : ''}</span></label> : ''}
+                                {(key === 'expiryDate') ?
+                                    <div class="col-sm-4">
+                                        <input type="date" id={key} name={key} value={this.formatDate(val)} min={moment(new Date()).format("YYYY-MM-DD")} class="form-control date-input" onChange={(date) => this.handleChange(date)} />
+                                    </div>
+                                    : ""
+                                }
+                                {(key === 'token' && val === "") ? <>
+                                    <div class="col-sm-2">
+                                        <input class="form-check-input" type="radio" name="gridRadios" id="gridRadios1" value="auto" checked={this.state.showAutoRadio} onClick={(e) => this.handleRadioEvent(e)} />
+                                        <label class="form-check-label ml10" >
+                                            Auto
+                                        </label>
+                                    </div>
+                                    <div class="col-sm-2">
+
+                                        <input class="form-check-input" type="radio" name="gridRadios" id="gridRadios2" value="custom" checked={!this.state.showAutoRadio} onClick={(e) => this.handleRadioEvent(e)} />
+                                        <label class="form-check-label ml10" >
+                                            Custom
+                                        </label>
+                                    </div>
+
+
+                                    <div id="autoGenerateKey" style={{ display: (this.state.showAutoRadio ? 'block' : 'none') }}>
+                                        <div className='col-sm-12 col-md-12 com-lg-12'>
+                                            <div class="row">
+                                                <div className='col-sm-4 col-md-4 com-lg-4'>
+                                                    &nbsp;
+                                                </div>
+                                                <div className='col-sm-3 col-md-3 com-lg-3'>
+                                                    <input class="form-control" type="text" placeholder="keyId" id="keyId" ref={node => (this.keyId = node)} value={this.state.customerInfo.configKey} disabled></input>
+                                                </div>
+                                                <div className='col-sm-3 col-md-3 com-lg-3'>
+                                                    <input class="form-control" type="text" placeholder="keySecret" id="keySecret" ref={node => (this.keySecret = node)}></input>
+                                                </div>
+                                                <div className='col-sm-2 col-md-2 com-lg-2'>
+                                                    <button type="button" class="btn btn-sm btn-primary mt3" onClick={() => this.generateApiKey("auto")} >Generate</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="customKey" style={{ display: (this.state.showAutoRadio ? 'none' : 'block') }}>
+                                        <div className='col-sm-12 col-md-12 com-lg-12'>
+                                            <div class="row">
+                                                <div className='col-sm-4 col-md-4 com-lg-4'>
+                                                    &nbsp;
+                                                </div>
+                                                <div className='col-sm-4 col-md-4 com-lg-4'>
+                                                    <input class="form-control" type="text" placeholder="token" id="customToken" ref={node => (this.customToken = node)} ></input>
+                                                </div>
+
+                                                <div className='col-sm-2 col-md-2 com-lg-2'>
+                                                    <button type="button" class="btn btn-sm btn-primary mt3" onClick={() => this.generateApiKey("custom")}>Add</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </> : <></>
+
+                                }
+                                {(key === 'token' && val !== "") ?
+                                    <div class="col-sm-4">
+                                        <input type="text" name={key} ref={node => (this[`${key}`] = node)} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, apiKey, val, event)} />
+                                    </div> : ""}
+                                {(key !== 'token' && key !== 'expiryDate' && key !== 'alertEmailsList') ?
+                                    <div class="col-sm-4">
+                                        <input type="text" name={key} ref={node => (this[`${key}`] = node)} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, apiKey, val, event)} />
+                                    </div>
+                                    : ""
+                                }
+
+
+                            </>
+                        }
+
+                    </div >
+                )
+            });
+        }
+        else apiKeyInfo = 'No Data';
+
+        if (roles != null) {
+            roleInfo = <div class="row mb-2"> <label for="inputText" class="col-sm-2 col-form-label">Select Roles</label>
+                {this.state.customerId === 'new' ? <div className="col-sm-8">
+                    <Multiselect
+                        options={defaultRoleNames}
+                        displayValue="label"
+                        onSelect={this.onSelect}
+                        onRemove={this.onRemove}
+
+                    />
+                </div> : <div className="col-sm-8">
+                    <Multiselect
+                        options={defaultRoleNames}
+                        displayValue="label"
+                        selectedValues={userRoles}
+                        onSelect={this.onSelect}
+                        onRemove={this.onRemove}
+                        required
+                    />
+                </div>}
+            </div>
+        }
+        else roleInfo = 'No Data';
+
+        if (mtaConfig != null) {
+            mtaConfigInfo = mtaConfig.map((item, index) => {
+                return (
+                    <div class="row mb-3" >
+                        <tr key={item.mtaName}>
+                            <td width='200px'><input type="text" class="form-control" defaultValue={item.mtaName} ref={node => (this[`mtaName${index}`] = node)} onBlur={(event) => this.updateTableInfo('mtaName', index, mtaConfig, event)} /> </td>
+                            <td width='600px'><input type="text" class="form-control" defaultValue={item.endPointURL} ref={node => (this[`endPointURL${index}`] = node)} onBlur={(event) => this.updateTableInfo('endPointURL', index, mtaConfig, event)} /> </td>
+                            <td width='400px'><input type="text" class="form-control" defaultValue={item.smtpHost} ref={node => (this[`smtpHost${index}`] = node)} onBlur={(event) => this.updateTableInfo('smtpHost', index, mtaConfig, event)} />  </td>
+                            <td width='150px'><input type="number" class="form-control" defaultValue={item.smtpPort} ref={node => (this[`smtpPort${index}`] = node)} onBlur={(event) => this.updateTableInfo('smtpPort', index, mtaConfig, event)} /> </td>
+                            <td width='100px'><CustomSelect selectKey="enableAuth" componentName={mtaConfig} optionsList={fetchSelectOptionList("enableAuth")} type="MTA" Index={index} defaultValue={item.enableAuth} /> </td>
+                            <td width='120px'><CustomSelect selectKey="enableStarttls" componentName={mtaConfig} optionsList={fetchSelectOptionList("enableStarttls")} type="MTA" Index={index} defaultValue={item.enableStarttls} /> </td>
+                            <td width='100px'><CustomSelect selectKey="injectType" componentName={mtaConfig} optionsList={fetchSelectOptionList("injectType")} type="MTA" Index={index} defaultValue={item.injectType} /> </td>
+                            <td width='150px'>
+                                <select value={item.priority} className="form-select" id={'selectbox' + index} onChange={(e) => this.handleOnChange(e, index, mtaConfig, item.priority)}>
+                                    {mtaConfig.map((item, index) => {
+                                        return <option value={index + 1} key={index + 1} >{index + 1}</option>
+                                    })}
+                                </select>
+
+                            </td>
+                            <td width='300px'><input type="text" class="form-control" defaultValue={item.userName} ref={node => (this[`userName${index}`] = node)} onBlur={(event) => this.updateTableInfo('userName', index, mtaConfig, event)} /> </td>
+                            <td width='100px'><input type="password" class="form-control" defaultValue={item.password} ref={node => (this[`password${index}`] = node)} onBlur={(event) => this.updateTableInfo('password', index, mtaConfig, event)} /> </td>
+                            <td width='20px'><button type="button" class="btn btn-secondary" title='Save' onClick={() => this.saveNewMta(index, mtaConfig)} ><i class="bi bi-check"></i></button></td>
+                            <td width='20px'><button type="button" class="btn btn-secondary" title='Remove' onClick={() => this.removeNewMta(index, mtaConfig)}><i class="bi bi-dash"></i></button> </td>
+                        </tr>
+                    </div>)
+            });
+            mtaHeader = <div class="mtaconfigWrapper">
+                <table class="row mtaconfigTable">
+                    <thead>
+                        <tr>
+                            <th width='250px' text-align="center" scope="col">MTAName<span className="mandatoryicon">*</span></th>
+                            <th width='620px' text-align="center" scope="col">EndPointURL<span className="mandatoryicon">*</span></th>
+                            <th width='400px' text-align="center" scope="col">SmtpHost<span className="mandatoryicon">*</span></th>
+                            <th width='150px' text-align="center" scope="col">SmtpPort<span className="mandatoryicon">*</span></th>
+                            <th width='100px' text-align="center" scope="col">EnableAuth</th>
+                            <th width='120px' text-align="center" scope="col">EnableStarttls</th>
+                            <th width='100px' text-align="center" scope="col">InjectType</th>
+                            <th width='150px' text-align="center" scope="col">Priority</th>
+                            <th width='300px' text-align="center" scope="col">UserName<span className="mandatoryicon">*</span></th>
+                            <th width='100px' text-align="center" scope="col">Password<span className="mandatoryicon">*</span></th>
+                            <th width='120px' text-align="center" scope="col"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {mtaConfigInfo}
+                    </tbody>
+                </table>
+            </div>
+
+        }
+        else mtaConfigInfo = 'No Data';
+
+        if (eventConfig != null) {
+            eventConfigInfo = Object.entries(eventConfig).map(([key, val]) => {
+                if (key !== 'mtaIdentfierList') {
+                    return (
+                        <div class="row mb-3">
+                            {/* <label for="inputText" class="col-sm-4 col-form-label">{key}</label> */}
+                            {this.displayEventInfo(eventConfig, key, val)}
+                        </div>
+                    )
+                }
+            });
+        }
+        else eventConfigInfo = 'No Data';
+
+        if (filterConfig.length > 0) {
+            filterConfigInfo = filterConfig.map((filter, index) => {
+                if (!filter.filterProperties.excludedDomains) {
+                    filter.filterProperties.excludedDomains = '';
+                }
+                return (
+                    <>
+                        <ul class="nav nav-pills mb-3" id="pills-tab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id={`pills-${filter.name}-tab`} data-bs-toggle="pill" data-bs-target={`#pills-${filter.name}`} type="button" role="tab" aria-controls={`pills-${filter.name}`} >{filter.name}</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content pt-2" id="myTabContent">
+                            <div class="tab-pane fade show active" id={`pills-${filter.name}`} role="tabpanel" aria-labelledby={`${filter.name}-tab`}>
+                                {filter.name === 'UnsubFilter' ?
+                                    <>
+                                        <div class="row mb-3">
+
+                                            <label class="col-sm-3 col-form-label">FilterName</label>
+                                            <div class="col-sm-9">
+                                                <input type="text" id={`filterName${index}`} class="form-control configInput" defaultValue={filter.name} disabled={filter.name} />
+                                            </div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterSource</label>
+                                            <div class="col-sm-9"><input type="text" id={`filterSource${index}`} class="form-control configInput" defaultValue={filter.filterSource} onBlur={(event) => this.updateTableInfo('filterSource', index, filterConfig, event)} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterStatus</label>
+                                            <div class="col-sm-9"><CustomSelect componentName={filterConfig} selectKey="filterStatus" defaultText="Select Config" optionsList={fetchSelectOptionList("filterStatus")} type="Filter" Index={index} defaultValue={filter.filterStatus} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterEndPoint</label>
+                                            <div class="col-sm-9"><input type="text" id={`filterEndPoint${index}`} class="form-control configInput" defaultValue={filter.filterProperties.endPoint} onBlur={(event) => this.updateTableInfo('endPoint', index, filterConfig, event)} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterListToken</label>
+                                            <div class="col-sm-9"><input type="text" id={`filterlistToken${index}`} class="form-control configInput " defaultValue={filter.filterProperties.listToken} onBlur={(event) => this.updateTableInfo('listToken', index, filterConfig, event)} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterNdrFrom</label>
+                                            <div class="col-sm-9"><input type="text" id={`filterndrFrom${index}`} class="form-control configInput " defaultValue={filter.filterProperties.ndrFrom} onBlur={(event) => this.updateTableInfo('ndrFrom', index, filterConfig, event)} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">ExcludedDomains</label>
+                                            <div class="col-sm-9"><input type="text" id={`excludedDomains${index}`} ref={node => (this[`excludedDomains${index}`] = node)} class="form-control configInput " defaultValue={filter.filterProperties.excludedDomains} onBlur={(event) => this.updateTableInfo('excludedDomains', index, filterConfig, event)} /></div>
+                                        </div>
+                                        <div class="row mb-3">
+                                            <label class="col-sm-3 col-form-label">FilterNdrMessage</label>
+                                            <div class="col-sm-9">
+                                                <table class="table table-borderless">
+                                                    <thead>
+                                                        <tr>
+                                                            <th class="col-sm-2" scope="col">Group Name</th>
+                                                            <th class="col-sm-2" scope="col">Senders</th>
+                                                            <th class="col-sm-2" scope="col">Message</th>
+                                                            <th class="col-sm-2" scope="col"> <button type="button" class="btn btn-sm btn-secondary" title='Add Row' onClick={() => this.addFilterRow(filter.ndrMessages, filterConfig, index)}><i class="bi bi-plus"></i></button></th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {this.displayNdrMessage(filter.ndrMessages, filterConfig)}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                        {/* <div class="text-center">
+                                            <button type="submit" className="btn btn-primary btn-block" onClick={() => this.saveNewFilter(index, filterConfig, filter)} > Update</button>
+                                        </div> */}
+                                    </>
+                                    :
+                                    ""}
+                            </div>
+
+                        </div></>
+
+
+                    // <div class="row mb-3">
+                    //     <tr key={filter.name}>
+                    //         <td class="configInput" width='150px'><input type="text" id={`filterName${index}`} class="form-control configInput" defaultValue={filter.name} disabled={filter.name} onBlur={(event) => this.updateTableInfo('name', index, filterConfig, event)} /> </td>
+                    //         <td class="configInput" width='150px'><input type="text" id={`filterSource${index}`} class="form-control configInput" defaultValue={filter.filterSource} onBlur={(event) => this.updateTableInfo('filterSource', index, filterConfig, event)} /> </td>
+                    //         <td class="configInput" width='130px'><CustomSelect componentName={filterConfig} selectKey="filterStatus" defaultText="Select Config" optionsList={fetchSelectOptionList("filterStatus")} type="Filter" Index={index} defaultValue={filter.filterStatus} /> </td>
+                    //         <td class="configInput" width='450px'><input type="text" id={`filterEndPoint${index}`} class="form-control configInput" defaultValue={filter.filterProperties.endPoint} onBlur={(event) => this.updateTableInfo('endPoint', index, filterConfig, event)} /> </td>
+                    //         <td class="configInput" width='150px'><input type="text" id={`filterlistToken${index}`} class="form-control configInput " defaultValue={filter.filterProperties.listToken} onBlur={(event) => this.updateTableInfo('listToken', index, filterConfig, event)} /></td>
+                    //         <td class="configInput" width='450px'><textarea wrap="hard" id={`filterndrMessage${index}`} class="form-control configInput" rows="1" defaultValue={filter.filterProperties.ndrMessage} onBlur={(event) => this.updateTableInfo('ndrMessage', index, filterConfig, event)} /> </td>
+                    //         <td class="configInput" width='20px'><button type="button" class="btn btn-secondary" onClick={() => this.saveNewFilter(index, filterConfig)} ><i class="bi bi-check"></i></button></td>
+                    //         <td class="configInput" width='20px'><button type="button" class="btn btn-secondary" onClick={() => this.removeNewFilter(index, filter.filterStatus)}><i class="bi bi-dash"></i></button> </td>
+                    //     </tr>
+                    // </div>
+                )
+            });
+
+            // filterHeader = <table class="row">
+            //     <thead>
+            //         <tr>
+            //             <th width='100px' text-align="center" scope="col">FilterName<span className="mandatoryicon">*</span></th>
+            //             <th width='120px' text-align="center" scope="col">FilterSource<span className="mandatoryicon">*</span></th>
+            //             <th width='50px' text-align="center" scope="col">FilterStatus</th>
+            //             <th width='290px' text-align="center" scope="col">FilterEndPoint<span className="mandatoryicon">*</span></th>
+            //             <th width='150px' text-align="center" scope="col">FilterListToken<span className="mandatoryicon">*</span></th>
+            //             <th width='50px' text-align="center" scope="col">FilterNdrMessage<span className="mandatoryicon">*</span></th>
+            //             <th width='200px' text-align="center" scope="col">&nbsp;&nbsp;</th>
+            //         </tr>
+            //     </thead>
+            //     <tbody>
+            //         {filterConfigInfo}
+            //     </tbody>
+            // </table>
+        }
+        else filterConfigInfo = 'No data';
+
+        if (customHeaders != null) {
+            customHeadersInfo = Object.entries(customHeaders).map(([key, val]) => {
+                return (
+                    <div class="row mb-3">
+                        {key.startsWith('newCustomKey') ?
+                            <>
+                                <div class="col-sm-4">
+                                    <input type="text" id={key} class="form-control" ref={node => (this[key] = node)} onBlur={(event) => this.updateData(key, customHeaders, "key", event)} />
+                                </div>
+                                <div class="col-sm-4">
+                                    <input type="text" id={val} class="form-control" ref={node => (this[val] = node)} onBlur={(event) => this.updateData(key, customHeaders, "value", event)} />
+                                </div>
+                                <div class="col-sm-2">
+                                    <button type="button" class="btn btn-secondary rolebutton" title='Save' onClick={() => this.saveNewConfig(key, val, customHeaders)}><i class="bi bi-check"></i></button>
+                                    <button type="button" class="btn btn-secondary" title='Remove' onClick={() => this.removeRow(key, customHeaders)}><i class="bi bi-dash"></i></button>
+                                </div>
+                            </>
+                            :
+                            <>
+                                <label for="inputText" class="col-sm-4 col-form-label">{key}</label>
+                                <div class="col-sm-4">
+                                    <input type="text" name={key} class="form-control" defaultValue={val} onChange={(event) => this.editChange(key, customHeaders, val.toString(), event)} />
+                                </div>
+                            </>
+                        }
+
+                    </div>
+                )
+            });
+        }
+        else customHeadersInfo = 'No Data';
+
+        if (notificationConfig != null) {
+            notificationHeader =
+                <table class="table table-borderless">
+                    <thead>
+                        <tr>
+                            <th class="col-sm-1" scope="col" text-align="left">Group{isMandatoryIcon('group') ? <span className="mandatoryicon">*</span> : ''}</th>
+                            <th class="col-sm-2" scope="col" text-align="left">From address{isMandatoryIcon('fromAddress') ? <span className="mandatoryicon">*</span> : ''}</th>
+                            <th class="col-sm-3" scope="col" text-align="left">Emails{isMandatoryIcon('emails') ? <span className="mandatoryicon">*</span> : ''}</th>
+                            <th class="col-sm-2" scope="col" text-align="left">Notification types{isMandatoryIcon('notificationTypes') ? <span className="mandatoryicon">*</span> : ''}</th>
+                            <th class="col-sm-2" scope="col" text-align="left">Mailer ID{isMandatoryIcon('mailerId') ? <span className='mandatoryicon'>*</span> : ''}</th>
+                            <th class="col-sm-1" scope="col" text-align="left">Status{isMandatoryIcon('status') ? <span className="mandatoryicon">*</span> : ''}</th>
+                            <th class="col-sm-1" scope='col' text-align='left'>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {
+                            Object.entries(notificationConfig).map(([key, val]) => {
+                                return <tr scope="row d-flex justify-content-expand" key={val.group + key}>
+                                    <td class="col-sm-1"><input type="text" ref={node => (this[`group${key}`] = node)} defaultValue={val.group} class="form-control" onBlur={(event) => { notificationConfig[key].group = event.target.value; this.setState({ notificationConfig }) }} /> </td>
+                                    <td class="col-sm-2"><input type="text" ref={node => (this[`fromAddress${key}`] = node)} defaultValue={val.fromAddress} class="form-control" onBlur={(event) => { notificationConfig[key].fromAddress = event.target.value; this.setState({ notificationConfig }) }} /> </td>
+                                    <td class="col-sm-3"><textarea ref={node => (this[`emails${key}`] = node)} defaultValue={val.emails} class="form-control" onBlur={(event) => { event.target.value.includes(',') ? notificationConfig[key].emails = event.target.value.split(',') : notificationConfig[key].emails = [event.target.value]; this.setState({ notificationConfig }) }} /></td>
+                                    <td class="col-sm-2" ><Multiselect id={`notificationTypes${key}`} type="text" placeholder='Select notification types'
+                                        displayValue="label" options={[{ label: 'WARN' }, { label: 'ERROR' }, { label: 'INFO' }, { label: 'SUMMARY' }, { label: 'HEALTH' }, { label: 'KEYEXPIRE' }]} ref={node => (this[`notificationTypes${key}`] = node)} selectedValues={this.getSelectedNotificationTypes(val.notificationTypes)} class="form-select" onSelect={(event) => this.saveNotificationTypes(event, key, notificationConfig)} onRemove={(event) => this.saveNotificationTypes(event, key, notificationConfig)} /></td>
+                                    <td class="col-sm-2"><input type="text" ref={node => (this[`mailerId${key}`] = node)} defaultValue={val.mailerId} class="form-control" onBlur={(event) => { notificationConfig[key].mailerId = event.target.value; this.setState({ notificationConfig }) }} /></td>
+                                    <td class="col-sm-1" >
+                                        <select ref={node => (this[`status${key}`] = node)} defaultValue={val.status} class="form-control" onChange={(event) => { notificationConfig[key].status = event.target.value; this.setState({ notificationConfig }) }}>
+                                            <option value="A">Active</option>
+                                            <option value="I">Inactive</option>
+                                        </select>
+                                    </td>
+                                    <td class='col-sm-1 d-flex justify-content-between'>
+                                        <button type="button" class="btn btn-secondary" title='Save' onClick={() => this.saveNewNotification(notificationConfig, key)} ><i class="bi bi-check"></i></button>
+                                        <button type="button" class="btn btn-secondary m-1" title='Remove' onClick={() => this.removeNewNotification(notificationConfig, key)}><i class="bi bi-dash"></i></button>
+                                    </td>
+                                </tr>
+                            })}
+                    </tbody>
+                </table >
+        }
+        else notificationConfigInfo = 'No Data';
+
+
+        return (
+            <>
+                {this.state.isLoading &&
+
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                }
+                {!this.state.isLoading &&
+                    <form id="msform" class="row g-3 needs-validation" >
+                        <ul class="nav nav-tabs nav-tabs-bordered tabClass" id="borderedTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="customer-info-tab" data-bs-toggle="tab" data-bs-target="#customer_info" type="button" role="tab" aria-controls="customer_info" aria-selected="true">Customer</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="api-info-tab" data-bs-toggle="tab" data-bs-target="#api_key_Info" type="button" role="tab" aria-controls="api_key_Info" aria-selected="false">API Key</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="event-config-tab" data-bs-toggle="tab" data-bs-target="#event_config" type="button" role="tab" aria-controls="event_config" aria-selected="false" onClick={() => this.enableFileEvents(eventConfig)}>Event</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="custom-header-tab" data-bs-toggle="tab" data-bs-target="#custom_header" type="button" role="tab" aria-controls="custom_header" aria-selected="false">CustomHeaders</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="mta-tab" data-bs-toggle="tab" data-bs-target="#mta" type="button" role="tab" aria-controls="mta" aria-selected="false">MTA Config</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="role-tab" data-bs-toggle="tab" data-bs-target="#role" type="button" role="tab" aria-controls="role" aria-selected="false" onClick={() => this.prepareRoleNameObject(defaultRolesInfo, roles)}>Roles</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="filter-tab" data-bs-toggle="tab" data-bs-target="#filter" type="button" role="tab" aria-controls="filter" aria-selected="false">Filter</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="summary-tab" data-bs-toggle="tab" data-bs-target="#summary" type="button" role="tab" aria-controls="summary" aria-selected="false">NotificationConfig</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content pt-2" id="borderedTabContent">
+                            <div class="tab-pane fade show active" id="customer_info" role="tabpanel" aria-labelledby="customer-info-tab">
+                                {customerConfigInfo}
+
+                            </div>
+                            <div class="tab-pane fade" id="api_key_Info" role="tabpanel" aria-labelledby="api-info-tab">
+                                {apiKeyInfo}
+
+                            </div>
+                            <div class="tab-pane fade" id="event_config" role="tabpanel" aria-labelledby="event-config-tab">
+                                {eventConfigInfo}
+                            </div>
+                            <div class="tab-pane fade" id="custom_header" role="tabpanel" aria-labelledby="custom-header-tab">
+                                {customHeadersInfo}
+                                <div class="row mb-3">
+                                    <div class='col-sm-4 col-md-4 col-lg-4 text_left'><button type="button" class="btn btn-sm btn-primary" onClick={() => this.addConfigFields(customHeaders, "Headers")}>Add New Header </button></div>
+                                    <div class='col-sm-4 col-md-4 col-lg-4'></div>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="mta" role="tabpanel" aria-labelledby="mta-tab">
+                                {mtaConfig !== null ? mtaHeader : mtaConfigInfo}
+                                <div class="row mb-3">
+                                    <div class='col-sm-4 col-md-4 col-lg-4 text_left'><button type="button" class="btn btn-sm btn-primary" onClick={() => this.addConfigFields(mtaConfig, "MTA")}>Add New MTA Configuration</button></div>
+
+                                </div>
+                                <div class='col-sm-12 col-md-12 col-lg-12 text-center'><span>Note:</span>For MTA Config either endPointURL or smtpHost are Mandatory</div>
+                            </div>
+                            <div class="tab-pane fade" id="role" role="tabpanel" aria-labelledby="role-tab">
+                                {roleInfo}
+
+                            </div>
+                            <div class="tab-pane fade" id="filter" role="tabpanel" aria-labelledby="filter-tab">
+                                {filterConfig.length > 0 ? filterConfigInfo :
+                                    <div class="row mb-3">
+                                        <div class='col-sm-4 col-md-4 col-lg-4 text_left'><button type="button" class="btn btn-sm btn-primary" onClick={() => this.addConfigFields(filterConfig, "Filter")}>Add New Filter </button></div>
+                                        <div class='col-sm-4 col-md-4 col-lg-4'></div>
+                                    </div>}
+                            </div>
+                            <div class="tab-pane fade" id="summary" role="tabpanel" aria-labelledby="summary-tab">
+                                {notificationConfig ? notificationHeader : notificationConfigInfo}
+                                <div class="row mb-3">
+                                    <div class='col-sm-4 col-md-4 col-lg-4 text_left'><button type="button" class="btn btn-sm btn-primary" onClick={() => this.addConfigFields(notificationConfig, "notificationConfig")}>Add New Notification Configuration</button></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            {(this.state.customerId === 'new' || customerConfigValue.status === 'P') && <button type="button" class="btn btn-primary" onClick={() => this.saveCustomerAsDraft(customerConfigData)} return>Save As Draft</button>}
+                            <button type="button" class="btn btn-primary" onClick={() => this.saveCustomer(customerConfigData)} return>Save Customer</button>
+                        </div>
+                    </form>
+                }
+            </>
+
+
+
+        );
+    }
+
+}
+export default CustomerEdit;
